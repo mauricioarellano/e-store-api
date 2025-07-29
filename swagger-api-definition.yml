@@ -1,0 +1,918 @@
+openapi: 3.0.0
+info:
+  title: E-Store API - Digital Commerce Platform
+  description: |
+    Comprehensive REST API for e-commerce operations including:
+    - Product catalog management
+    - Order processing and fulfillment
+    - Customer relationship management
+    - Inventory tracking
+    - Sales analytics
+    - Review and rating system
+    
+    Supports OAuth2 authentication for secure operations.
+    Version: Production Release 1.0
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api-support@estore.com
+    url: https://api.estore.com/docs
+  license:
+    name: Commercial License
+    url: https://api.estore.com/license
+
+servers:
+  - url: https://api.estore.com/v1
+    description: Production server
+  - url: https://sandbox.api.estore.com/v1
+    description: Sandbox environment
+
+paths:
+  /sales:
+    get:
+      summary: Retrieve paginated sales records
+      description: |
+        Fetches historical sales data with filtering capabilities.
+        Access restricted to financial managers and administrators.
+      operationId: getSalesData
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/SortField'
+        - $ref: '#/components/parameters/SortOrder'
+        - $ref: '#/components/parameters/Filter'
+        - name: dateRange
+          in: query
+          description: Date range filter (ISO 8601 format)
+          schema:
+            type: string
+            example: "2023-01-01T00:00:00Z/2023-12-31T23:59:59Z"
+      security:
+        - OAuth2: [sales.read]
+      responses:
+        '200':
+          headers:
+            X-RateLimit-Limit:
+              description: Maximum allowed requests per window (100 req/sec)
+              schema:
+                type: integer
+                default: 100
+            X-RateLimit-Remaining:
+              description: Remaining requests in current window
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              description: Milliseconds until rate limit resets
+              schema:
+                type: integer
+                default: 1000
+          description: Successful retrieval of sales data
+          content:
+            application/json:
+              schema: 
+                $ref: '#/components/schemas/PaginatedSales'
+        '400':
+          description: Invalid filter parameters
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '403':
+          description: Forbidden - Insufficient permissions
+        '429':
+          description: Too Many Requests
+          headers:
+            Retry-After:
+              description: Seconds to wait before next request
+              schema:
+                type: integer
+                example: 30
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /stock:
+    get:
+      summary: Get current inventory levels
+      description: Retrieve real-time stock information with filtering
+      operationId: getInventory
+      parameters:
+        - name: sku
+          in: query
+          description: Filter by product SKU
+          schema:
+            type: string
+        - $ref: '#/components/parameters/WarehouseId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Successful inventory retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInventory'
+    patch:
+      summary: Update inventory levels
+      description: Adjust stock quantities (requires inventory manager role)
+      operationId: updateInventory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryUpdate'
+      security:
+        - OAuth2: [inventory.write]
+      responses:
+        '200':
+          description: Inventory successfully updated
+        '403':
+          description: Forbidden - Insufficient permissions
+
+  /orders:
+    get:
+      summary: List orders
+      description: Retrieve order history with filtering options
+      operationId: listOrders
+      parameters:
+        - name: status
+          in: query
+          description: Filter by order status
+          schema:
+            type: string
+            enum: [pending, processing, shipped, delivered, cancelled]
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/DateRange'
+      responses:
+        '200':
+          description: Successful order retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrders'
+    post:
+      summary: Create new order
+      description: Process a new customer order
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+      responses:
+        '201':
+          description: Order successfully created
+          headers:
+            Location:
+              description: URL of created order
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /invoices:
+    get:
+      summary: Retrieve invoices
+      description: Get financial invoices with filtering
+      operationId: getInvoices
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/DateRange'
+      responses:
+        '200':
+          description: Successful invoice retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInvoices'
+    post:
+      summary: Generate invoice
+      description: Create new invoice document
+      operationId: createInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceCreate'
+      security:
+        - OAuth2: [invoices.write]
+      responses:
+        '201':
+          description: Invoice successfully created
+
+  /customers:
+    get:
+      summary: List customers
+      description: Retrieve customer accounts with search filters
+      operationId: listCustomers
+      parameters:
+        - name: email
+          in: query
+          description: Filter by email address
+          schema:
+            type: string
+        - name: loyaltyTier
+          in: query
+          description: Filter by loyalty program tier
+          schema:
+            type: string
+            enum: [bronze, silver, gold, platinum]
+      responses:
+        '200':
+          description: Successful customer retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCustomers'
+    post:
+      summary: Create new customer
+      description: Register a new customer account
+      operationId: createCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreate'
+      responses:
+        '201':
+          description: Customer successfully created
+
+  /reviews:
+    get:
+      summary: Get product reviews
+      description: Retrieve product ratings and reviews
+      operationId: getReviews
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - name: minRating
+          in: query
+          description: Minimum rating value (1-5)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+      responses:
+        '200':
+          description: Successful reviews retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReviews'
+    post:
+      summary: Submit review
+      description: Create new product review
+      operationId: createReview
+      security:
+        - OAuth2: [reviews.write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCreate'
+      responses:
+        '201':
+          description: Review successfully created
+
+  /categories:
+    get:
+      summary: List product categories
+      description: Retrieve category hierarchy
+      operationId: getCategories
+      responses:
+        '200':
+          description: Successful category retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryTree'
+    post:
+      summary: Create new category
+      description: Add new product category (admin only)
+      operationId: createCategory
+      security:
+        - OAuth2: [categories.manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreate'
+      responses:
+        '201':
+          description: Category successfully created
+
+  /products:
+    get:
+      summary: List products
+      description: Retrieve products with filtering and search
+      operationId: getProducts
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+        - name: priceRange
+          in: query
+          description: Filter by price range (min-max)
+          schema:
+            type: string
+            example: "25.99-99.99"
+        - name: availability
+          in: query
+          description: Filter by stock availability
+          schema:
+            type: string
+            enum: [in_stock, low_stock, out_of_stock]
+      responses:
+        '200':
+          description: Successful products retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProducts'
+    post:
+      summary: Create new product
+      description: Add new product to catalog (admin only)
+      operationId: createProduct
+      security:
+        - OAuth2: [products.manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: Product successfully created
+
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://api.estore.com/oauth/authorize
+          tokenUrl: https://api.estore.com/oauth/token
+          scopes:
+            sales.read: Read sales data
+            inventory.write: Modify inventory
+            invoices.write: Create invoices
+            reviews.write: Submit reviews
+            categories.manage: Manage categories
+            products.manage: Manage products
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Page number for pagination (1-indexed)
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: perPage
+      in: query
+      description: Number of items per page
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    SortField:
+      name: sortBy
+      in: query
+      description: Field to sort results by
+      required: false
+      schema:
+        type: string
+        enum: [createdAt, updatedAt, price, name]
+        default: createdAt
+    SortOrder:
+      name: sortOrder
+      in: query
+      description: Sort direction
+      required: false
+      schema:
+        type: string
+        enum: [ASC, DESC]
+        default: DESC
+    Filter:
+      name: filter
+      in: query
+      description: JSON filter criteria
+      required: false
+      schema:
+        type: string
+        example: '{"status": "shipped", "total": {"gt": 100}}'
+    WarehouseId:
+      name: warehouseId
+      in: query
+      description: Filter by warehouse location
+      schema:
+        type: string
+        format: uuid
+    CustomerId:
+      name: customerId
+      in: query
+      description: Filter by customer ID
+      schema:
+        type: string
+        format: uuid
+    OrderId:
+      name: orderId
+      in: query
+      description: Filter by order ID
+      schema:
+        type: string
+        format: uuid
+    ProductId:
+      name: productId
+      in: query
+      description: Filter by product ID
+      schema:
+        type: string
+        format: uuid
+    CategoryId:
+      name: categoryId
+      in: query
+      description: Filter by category ID
+      schema:
+        type: string
+        format: uuid
+    DateRange:
+      name: dateRange
+      in: query
+      description: Date range filter (ISO 8601 interval)
+      schema:
+        type: string
+
+  schemas:
+    # Base Schemas
+    PaginatedResults:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of matching items
+        page:
+          type: integer
+          description: Current page number
+        perPage:
+          type: integer
+          description: Items per page
+        totalPages:
+          type: integer
+          description: Total available pages
+      required:
+        - total
+        - page
+        - perPage
+
+    ErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid input parameters"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              issue:
+                type: string
+
+    # Sales Domain
+    Sale:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        totalAmount:
+          type: number
+          format: float
+          description: Total sale amount in USD
+        taxAmount:
+          type: number
+          format: float
+        discountAmount:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - orderId
+        - totalAmount
+        - createdAt
+
+    PaginatedSales:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResults'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Sale'
+
+    # Inventory Domain
+    InventoryItem:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        warehouseId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+        lowStockThreshold:
+          type: integer
+          default: 10
+        lastStockUpdate:
+          type: string
+          format: date-time
+
+    InventoryUpdate:
+      type: object
+      properties:
+        updates:
+          type: array
+          items:
+            type: object
+            properties:
+              productId:
+                type: string
+                format: uuid
+              adjustment:
+                type: integer
+                description: Positive for stock increase, negative for decrease
+              reason:
+                type: string
+                enum: [restock, return, damage, correction]
+          minItems: 1
+
+    PaginatedInventory:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResults'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/InventoryItem'
+
+    # Order Domain
+    OrderItem:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        unitPrice:
+          type: number
+          format: float
+
+    OrderCreate:
+      type: object
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+          minItems: 1
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        billingAddress:
+          $ref: '#/components/schemas/Address'
+        paymentMethodId:
+          type: string
+          format: uuid
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, processing, shipped, delivered, cancelled]
+        total:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        customer:
+          $ref: '#/components/schemas/Customer'
+
+    PaginatedOrders:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResults'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Order'
+
+    # Customer Domain
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+          default: "US"
+
+    CustomerCreate:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          format: password
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        billingAddress:
+          $ref: '#/components/schemas/Address'
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        loyaltyPoints:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    PaginatedCustomers:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResults'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Customer'
+
+    # Product Domain
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        sku:
+          type: string
+        price:
+          type: number
+          format: float
+        categoryIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        attributes:
+          type: object
+          additionalProperties: true
+        stockStatus:
+          type: string
+          enum: [in_stock, low_stock, out_of_stock]
+          readOnly: true
+
+    ProductCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        sku:
+          type: string
+        price:
+          type: number
+          format: float
+        initialStock:
+          type: integer
+        categoryIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        attributes:
+          type: object
+          additionalProperties: true
+
+    PaginatedProducts:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResults'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Product'
+
+    # Category Domain
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        slug:
+          type: string
+        description:
+          type: string
+
+    CategoryTree:
+      type: array
+      items:
+        type: object
+        properties:
+          category:
+            $ref: '#/components/schemas/Category'
+          children:
+            type: array
+            items:
+              $ref: '#/components/schemas/CategoryTree'
+
+    CategoryCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+
+    # Review Domain
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ReviewCreate:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+
+    PaginatedReviews:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResults'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Review'
+
+    # Invoice Domain
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: float
+        tax:
+          type: number
+          format: float
+        issuedAt:
+          type: string
+          format: date-time
+        dueAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [issued, paid, overdue]
+
+    InvoiceCreate:
+      type: object
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        dueDays:
+          type: integer
+          default: 30
+
+    PaginatedInvoices:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResults'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Invoice'
