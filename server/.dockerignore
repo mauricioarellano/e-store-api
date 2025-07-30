@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Documentation
+README.md
+*.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Development dependencies (if you have them)
+node_modules
+
+# Vendor directory (will be installed during build)
+vendor/
+
+# Cache and temporary files
+.cache
+tmp/
+temp/

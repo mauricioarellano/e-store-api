@@ -1,0 +1,14 @@
+services:
+  api:
+    build: .
+    image: api-php-slim4:latest
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/app
+    networks:
+      - api-network
+
+networks:
+  api-network:
+    driver: bridge
